@@ -9,12 +9,81 @@
 </head>
 <body>
 
+<!-- ── Onboarding wizard ─────────────────────────────────────────────────── -->
+<div class="overlay hidden" id="wizardOverlay">
+  <div class="wizard-panel">
+
+    <div class="wiz-step" id="wizStep1">
+      <div class="wiz-emoji">🧍</div>
+      <h2>Welcome to Upright GO 1</h2>
+      <p>Let's create a profile to start tracking your posture.</p>
+      <label class="field-label" for="wizName">Your name</label>
+      <input class="text-input" type="text" id="wizName" placeholder="e.g. Joel" maxlength="30" autocomplete="off">
+      <button class="btn btn-full" id="wizNext1">Continue →</button>
+    </div>
+
+    <div class="wiz-step hidden" id="wizStep2">
+      <div class="wiz-emoji">🎯</div>
+      <h2>Choose sensitivity</h2>
+      <p>How quickly should you be alerted when slouching?</p>
+      <div class="sens-cards" id="wizSensCards">
+        <button class="sens-card" data-sens="lenient">
+          <strong>Lenient</strong>
+          <span>Alerts after ~8s of slouching. Best for beginners — fewer interruptions.</span>
+        </button>
+        <button class="sens-card active" data-sens="normal">
+          <strong>Normal ✓</strong>
+          <span>Alerts after ~5s. Recommended — balanced awareness.</span>
+        </button>
+        <button class="sens-card" data-sens="strict">
+          <strong>Strict</strong>
+          <span>Alerts after ~2.5s. For advanced users who want sharp feedback.</span>
+        </button>
+      </div>
+      <button class="btn btn-full" id="wizNext2">Continue →</button>
+    </div>
+
+    <div class="wiz-step hidden" id="wizStep3">
+      <div class="wiz-emoji">✅</div>
+      <h2>All set, <span id="wizNameShow"></span>!</h2>
+      <p>Turn on your Upright GO 1 — it will connect automatically.</p>
+      <p class="tip-note">💡 Sit up straight and double-press the button to calibrate before your first session.</p>
+      <button class="btn btn-full" id="wizDone">Start training</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Add profile dialog ───────────────────────────────────────────────── -->
+<div class="overlay hidden" id="addProfileOverlay">
+  <div class="dialog-panel">
+    <h3>Add profile</h3>
+    <input class="text-input" type="text" id="addProfileName" placeholder="Name" maxlength="30">
+    <div class="dialog-actions">
+      <button class="btn btn-ghost" id="addProfileCancel">Cancel</button>
+      <button class="btn" id="addProfileSave">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Header ────────────────────────────────────────────────────────────── -->
 <header>
   <div class="header-inner">
     <div class="brand">
-      <span class="brand-icon">🧍</span>
+      <span>🧍</span>
       <span class="brand-name">Upright GO 1</span>
     </div>
+
+    <div class="profile-wrap" id="profileWrap">
+      <button class="profile-btn" id="profileBtn">
+        <span id="profileBtnName">—</span> <span class="arr">▾</span>
+      </button>
+      <div class="profile-drop hidden" id="profileDrop">
+        <div id="profileList"></div>
+        <button class="drop-add" id="dropAddProfile">＋ Add profile</button>
+      </div>
+    </div>
+
     <div class="status-badge">
       <span class="dot" id="statusDot"></span>
       <span id="statusText">Searching…</span>
@@ -22,6 +91,16 @@
   </div>
 </header>
 
+<!-- ── Mode bar ──────────────────────────────────────────────────────────── -->
+<div class="mode-bar">
+  <div class="mode-inner">
+    <button class="mode-btn active" data-mode="desk">🖥️ At Desk</button>
+    <button class="mode-btn" data-mode="moving">🚶 Moving</button>
+    <button class="mode-btn" data-mode="break">☕ Break</button>
+  </div>
+</div>
+
+<!-- ── Main ──────────────────────────────────────────────────────────────── -->
 <main>
 
   <!-- Posture ring -->
@@ -30,59 +109,90 @@
       <div class="posture-icon" id="postureIcon">📡</div>
       <div class="posture-label" id="postureLabel">Searching for device…</div>
     </div>
+    <div class="pressure-wrap">
+      <div class="pressure-top">
+        <span class="pressure-lbl">Alert pressure</span>
+        <span id="pressurePct">0%</span>
+      </div>
+      <div class="pressure-track">
+        <div class="pressure-fill" id="pressureFill"></div>
+        <div class="pressure-marker" id="pressureMarker"></div>
+      </div>
+      <div class="pressure-hint">Buzz triggers when bar crosses the marker</div>
+    </div>
   </section>
 
-  <!-- Live stats -->
+  <!-- Session stats -->
   <section class="stats-row">
     <div class="stat-card">
-      <div class="stat-value" id="scoreValue">—</div>
-      <div class="stat-label">Score</div>
+      <div class="stat-val" id="scoreValue">—</div>
+      <div class="stat-lbl">Score</div>
     </div>
     <div class="stat-card">
-      <div class="stat-value" id="durationValue">—</div>
-      <div class="stat-label">Session</div>
+      <div class="stat-val" id="durationValue">—</div>
+      <div class="stat-lbl">Session</div>
     </div>
     <div class="stat-card">
-      <div class="stat-value" id="slouchValue">—</div>
-      <div class="stat-label">Alerts</div>
+      <div class="stat-val" id="slouchValue">—</div>
+      <div class="stat-lbl">Alerts</div>
     </div>
   </section>
 
-  <!-- All-time stats -->
-  <section class="card" id="alltimeCard">
+  <!-- Coaching -->
+  <section class="card" id="coachingCard">
+    <div class="coaching-head">
+      <h2 class="card-title">Training Progress</h2>
+      <span class="phase-badge" id="phaseBadge">—</span>
+    </div>
+
+    <div class="grad-section">
+      <div class="grad-label">
+        Graduation: <strong><span id="gradDays">0</span> of 7</strong> qualifying days
+        <span class="small-note">(75%+ score &amp; daily goal per day)</span>
+      </div>
+      <div class="grad-segs" id="gradSegs">
+        <div class="grad-seg"></div><div class="grad-seg"></div>
+        <div class="grad-seg"></div><div class="grad-seg"></div>
+        <div class="grad-seg"></div><div class="grad-seg"></div>
+        <div class="grad-seg"></div>
+      </div>
+    </div>
+
+    <div class="coaching-stats">
+      <div class="c-stat"><div class="c-val" id="streakVal">0</div><div class="c-lbl">Streak</div></div>
+      <div class="c-stat"><div class="c-val" id="avgVal">—</div><div class="c-lbl">7-day avg</div></div>
+      <div class="c-stat"><div class="c-val" id="trendVal">→</div><div class="c-lbl">Trend</div></div>
+      <div class="c-stat"><div class="c-val" id="bestVal">—</div><div class="c-lbl">Best</div></div>
+    </div>
+
+    <div class="goal-row">
+      <div class="goal-label">Today: <span id="todayMin">0</span> / <span id="goalMin">20</span> min</div>
+      <div class="goal-track"><div class="goal-fill" id="goalFill"></div></div>
+    </div>
+
+    <div class="tip-card">
+      <span class="tip-icon">💡</span>
+      <span id="tipText">Loading…</span>
+    </div>
+  </section>
+
+  <!-- All-time -->
+  <section class="card">
     <h2 class="card-title">All Time</h2>
     <div class="alltime-row">
-      <div class="alltime-item">
-        <div class="alltime-value" id="atDays">—</div>
-        <div class="alltime-label">Days trained</div>
-      </div>
-      <div class="alltime-item">
-        <div class="alltime-value" id="atHours">—</div>
-        <div class="alltime-label">Total hours</div>
-      </div>
-      <div class="alltime-item">
-        <div class="alltime-value" id="atScore">—</div>
-        <div class="alltime-label">Avg score</div>
-      </div>
+      <div class="at-item"><div class="at-val" id="atDays">—</div><div class="at-lbl">Days trained</div></div>
+      <div class="at-item"><div class="at-val" id="atHours">—</div><div class="at-lbl">Total hours</div></div>
+      <div class="at-item"><div class="at-val" id="atScore">—</div><div class="at-lbl">Avg score</div></div>
     </div>
   </section>
 
   <!-- 7-day history -->
   <section class="card">
     <h2 class="card-title">Last 7 Days</h2>
-    <div class="chart-wrap">
-      <canvas id="historyChart"></canvas>
-    </div>
+    <div class="chart-wrap"><canvas id="historyChart"></canvas></div>
     <div class="table-wrap">
       <table>
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Score</th>
-            <th>Time (min)</th>
-            <th>Alerts</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Date</th><th>Score</th><th>Min</th><th>Alerts</th></tr></thead>
         <tbody id="historyBody">
           <tr><td colspan="4" class="empty">No history yet — start a session!</td></tr>
         </tbody>
@@ -90,23 +200,54 @@
     </div>
   </section>
 
-  <!-- Guided exercises -->
+  <!-- Exercises -->
   <section class="card">
     <h2 class="card-title">Guided Exercises</h2>
-    <p class="section-note">Short daily exercises recommended alongside posture training. Tap any card to search YouTube.</p>
-    <div class="exercises-grid" id="exercisesGrid"></div>
+    <p class="section-note">Daily exercises that complement posture training. Tap to search YouTube.</p>
+    <div class="ex-grid" id="exGrid"></div>
   </section>
 
   <!-- Settings -->
   <section class="card">
     <h2 class="card-title">Settings</h2>
-    <div class="setting-row">
-      <label for="cooldownRange">
-        Buzz cooldown — wait <strong id="cooldownDisplay">10</strong>s between alerts
-      </label>
-      <input type="range" id="cooldownRange" min="3" max="60" step="1" value="10">
-      <div class="range-labels"><span>3s (aggressive)</span><span>60s (gentle)</span></div>
+
+    <div class="setting-group">
+      <div class="setting-label">Sensitivity preset</div>
+      <div class="preset-row" id="presetRow">
+        <button class="preset-btn" data-preset="lenient">Lenient</button>
+        <button class="preset-btn active" data-preset="normal">Normal</button>
+        <button class="preset-btn" data-preset="strict">Strict</button>
+        <button class="preset-btn" data-preset="custom">Custom</button>
+      </div>
+      <div class="preset-desc" id="presetDesc">Alerts after ~5s of slouching. 15s between alerts.</div>
     </div>
+
+    <div class="setting-group" id="customGroup">
+      <div class="slider-block">
+        <label>Alert delay: <strong id="windowDisplay">5</strong>s
+          <span class="hint">how long slouch must persist before buzzing</span></label>
+        <input type="range" id="windowRange" min="1" max="15" step="0.5" value="5">
+      </div>
+      <div class="slider-block">
+        <label>Alert threshold: <strong id="thresholdDisplay">60</strong>%
+          <span class="hint">% of the alert window showing slouch</span></label>
+        <input type="range" id="thresholdRange" min="30" max="90" step="5" value="60">
+      </div>
+      <div class="slider-block">
+        <label>Buzz cooldown: <strong id="cooldownDisplay">15</strong>s
+          <span class="hint">minimum gap between buzzes</span></label>
+        <input type="range" id="cooldownRange" min="3" max="120" step="1" value="15">
+        <div class="range-ends"><span>3s</span><span>2 min</span></div>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <div class="slider-block">
+        <label>Daily goal: <strong id="goalDisplay">20</strong> minutes</label>
+        <input type="range" id="goalRange" min="5" max="60" step="5" value="20">
+      </div>
+    </div>
+
     <button class="btn" id="saveBtn">Save settings</button>
   </section>
 
@@ -114,7 +255,7 @@
 
 <footer>
   <p>
-    Open-source replacement for the discontinued Upright app. &nbsp;·&nbsp;
+    Open-source Upright GO 1 dashboard &nbsp;·&nbsp;
     BLE protocol by <a href="https://github.com/niltonheck/upright-go-1-reverse-engineering" target="_blank" rel="noopener">niltonheck</a>
     &nbsp;·&nbsp; Not affiliated with Upright Technologies.
   </p>
