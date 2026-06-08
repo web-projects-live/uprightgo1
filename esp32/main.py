@@ -394,98 +394,33 @@ async def ble_task():
         else:
             await asyncio.sleep(0.5)
 
-# ── Wi-Fi ─────────────────────────────────────────────────────────────────────
-_setup_mode = False   # True while showing the first-boot setup portal
+# ── Wi-Fi setup (runs synchronously BEFORE asyncio, nothing can interfere) ────
 
-_SETUP_HTML = """\
-<!DOCTYPE html><html><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Upright GO — Wi-Fi Setup</title>
-<style>
-*{box-sizing:border-box}body{font-family:sans-serif;background:#1a1d2e;color:#e2e8f0;
-display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
-.card{background:#242840;border-radius:12px;padding:2rem;max-width:360px;width:100%}
-h2{margin:0 0 .5rem}p{color:#8892a4;margin:0 0 1.5rem;font-size:.9rem}
-input{width:100%;padding:.7rem 1rem;border-radius:8px;border:1px solid #363b5e;
-background:#1a1d2e;color:#e2e8f0;margin-bottom:.75rem;font-size:1rem}
-button{width:100%;padding:.8rem;border-radius:8px;border:none;cursor:pointer;
-font-size:1rem;font-weight:600;margin-bottom:.5rem}
-.btn-pri{background:#7c6aff;color:#fff}.btn-skip{background:#363b5e;color:#8892a4}
-.msg{text-align:center;margin-top:1rem;font-size:.85rem;color:#00d4aa}
-</style></head><body><div class="card">
-<h2>Upright GO 1</h2>
-<p>Enter your home Wi-Fi to connect — or skip to use this hotspot directly.
-The dashboard works either way.</p>
-<form method="POST" action="/wifi-save">
-<input name="ssid" placeholder="Wi-Fi network name" required autocomplete="off">
-<input name="password" type="password" placeholder="Wi-Fi password" autocomplete="off">
-<button class="btn-pri" type="submit">Save &amp; connect</button>
-</form>
-<form method="POST" action="/wifi-skip">
-<button class="btn-skip" type="submit">Skip — use hotspot only</button>
-</form>
-<p class="msg" id="m"></p>
-</div></body></html>
-"""
-
-_SAVED_HTML = """\
-<!DOCTYPE html><html><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="8;url=http://{ip}">
-<title>Upright GO — Connecting</title>
-<style>body{{font-family:sans-serif;background:#1a1d2e;color:#e2e8f0;
-display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}}
-.card{{background:#242840;border-radius:12px;padding:2rem;max-width:360px;
-width:100%;text-align:center}}.ip{{color:#00d4aa;font-size:1.2rem;font-weight:700;
-margin:1rem 0}}</style></head><body><div class="card">
-<h2>Connecting…</h2>
-<p>Joining <strong>{ssid}</strong>. This page will redirect in ~8 seconds.</p>
-<div class="ip"><a href="http://{ip}" style="color:#00d4aa">http://{ip}</a></div>
-<p style="color:#8892a4;font-size:.85rem">Bookmark that address on your home Wi-Fi.</p>
-</div></body></html>
-"""
-
-def _start_ap(ssid="UprightGO-Setup"):
-    ap = network.WLAN(network.AP_IF)
-    ap.active(True)
-    ap.config(essid=ssid, authmode=0)
-    print("AP: {} (open, no password) — http://192.168.4.1".format(ssid))
-    return "192.168.4.1"
-
-def connect_wifi():
-    global _setup_mode
-    ssid, password = _load_wifi()
-
-    if ssid:
-        wlan = network.WLAN(network.STA_IF)
-        wlan.active(True)
-        if not wlan.isconnected():
-            print("Connecting to Wi-Fi:", ssid)
-            wlan.connect(ssid, password)
-            deadline = time.time() + 20
-            while not wlan.isconnected() and time.time() < deadline:
-                time.sleep(0.5)
-        if wlan.isconnected():
-            ip = wlan.ifconfig()[0]
-            print("Wi-Fi OK: http://{}".format(ip))
-            return ip
-        print("Wi-Fi failed — starting setup hotspot")
-
-    # No config or failed — run setup portal
-    _setup_mode = True
-    return _start_ap()
-
-def _parse_form(body_bytes):
-    """Parse application/x-www-form-urlencoded body."""
-    params = {}
-    try:
-        for pair in body_bytes.decode().split("&"):
-            if "=" in pair:
-                k, v = pair.split("=", 1)
-                params[_url_decode(k)] = _url_decode(v)
-    except Exception:
-        pass
-    return params
+_SETUP_HTML = b"""\
+HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n\
+<!DOCTYPE html><html><head><meta charset="UTF-8">\
+<meta name="viewport" content="width=device-width,initial-scale=1">\
+<title>Upright GO Setup</title>\
+<style>*{box-sizing:border-box}body{font-family:sans-serif;background:#1a1d2e;\
+color:#e2e8f0;display:flex;align-items:center;justify-content:center;\
+min-height:100vh;margin:0}.card{background:#242840;border-radius:12px;\
+padding:2rem;max-width:360px;width:100%}h2{margin:0 0 .5rem}\
+p{color:#8892a4;margin:0 0 1.5rem;font-size:.9rem}\
+input{width:100%;padding:.7rem 1rem;border-radius:8px;border:1px solid #363b5e;\
+background:#1a1d2e;color:#e2e8f0;margin-bottom:.75rem;font-size:1rem}\
+button{width:100%;padding:.8rem;border-radius:8px;border:none;cursor:pointer;\
+font-size:1rem;font-weight:600;margin-bottom:.5rem}\
+.p{background:#7c6aff;color:#fff}.s{background:#363b5e;color:#8892a4}\
+</style></head><body><div class="card">\
+<h2>Upright GO 1</h2>\
+<p>Enter your home Wi-Fi — or skip to use this hotspot only.</p>\
+<form method="POST" action="/save">\
+<input name="s" placeholder="Wi-Fi name" autocomplete="off">\
+<input name="p" type="password" placeholder="Wi-Fi password" autocomplete="off">\
+<button class="p" type="submit">Save &amp; connect</button></form>\
+<form method="POST" action="/skip">\
+<button class="s" type="submit">Skip — hotspot only</button></form>\
+</div></body></html>"""
 
 def _url_decode(s):
     s = s.replace("+", " ")
@@ -502,6 +437,139 @@ def _url_decode(s):
         out += s[i]
         i += 1
     return out
+
+def _parse_form(body):
+    params = {}
+    try:
+        for pair in body.decode().split("&"):
+            if "=" in pair:
+                k, v = pair.split("=", 1)
+                params[_url_decode(k)] = _url_decode(v)
+    except Exception:
+        pass
+    return params
+
+def run_setup_portal():
+    """Synchronous setup portal — runs before asyncio, no interference."""
+    import socket as _socket
+    ap = network.WLAN(network.AP_IF)
+    ap.active(True)
+    ap.config(essid="UprightGO-Setup", authmode=0)
+    time.sleep(1)
+    print("Setup portal: connect to UprightGO-Setup, open http://192.168.4.1")
+
+    srv = _socket.socket()
+    srv.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+    srv.bind(("0.0.0.0", 80))
+    srv.listen(1)
+    srv.settimeout(120)   # give up after 2 min if nobody connects
+
+    _REDIR  = b"HTTP/1.0 302 Found\r\nLocation: http://192.168.4.1/\r\n\r\n"
+    _PORTAL = (b"/generate_204", b"/gen_204", b"/hotspot-detect.html",
+               b"/connecttest.txt", b"/ncsi.txt", b"/redirect")
+
+    done = False
+    while not done:
+        try:
+            conn, addr = srv.accept()
+            print("Setup: connection from", addr)
+        except OSError:
+            print("Setup portal timed out, continuing without Wi-Fi")
+            break
+        try:
+            conn.settimeout(5)
+            req = b""
+            while b"\r\n\r\n" not in req:
+                chunk = conn.recv(256)
+                if not chunk:
+                    break
+                req += chunk
+
+            line1 = req.split(b"\r\n")[0]
+            parts = line1.split(b" ")
+            method = parts[0] if len(parts) > 0 else b""
+            path   = parts[1].split(b"?")[0] if len(parts) > 1 else b"/"
+
+            # Captive portal detection → redirect to setup page
+            if path in _PORTAL:
+                conn.send(_REDIR)
+
+            elif path == b"/save" and method == b"POST":
+                cl = 0
+                for ln in req.split(b"\r\n"):
+                    if ln.lower().startswith(b"content-length:"):
+                        cl = int(ln.split(b":")[1].strip())
+                body_start = req.find(b"\r\n\r\n") + 4
+                body = req[body_start:]
+                while len(body) < cl:
+                    body += conn.recv(256)
+                p = _parse_form(body)
+                ssid = p.get("s", "").strip()
+                pw   = p.get("p", "")
+                if ssid:
+                    _save_wifi(ssid, pw)
+                    conn.send(b"HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n"
+                              b"<html><body style='font-family:sans-serif;background:#1a1d2e;"
+                              b"color:#e2e8f0;padding:2rem'><h2>Saved!</h2>"
+                              b"<p>Rebooting to connect to your Wi-Fi...</p></body></html>")
+                    done = True
+                else:
+                    conn.send(_SETUP_HTML)
+
+            elif path == b"/skip" and method == b"POST":
+                _save_wifi("", "")
+                conn.send(b"HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n"
+                          b"<html><body style='font-family:sans-serif;background:#1a1d2e;"
+                          b"color:#e2e8f0;padding:2rem'><h2>OK!</h2>"
+                          b"<p>Using hotspot mode. Dashboard starting...</p></body></html>")
+                done = True
+
+            else:
+                conn.send(_SETUP_HTML)
+
+        except Exception as e:
+            print("Setup handler err:", e)
+        finally:
+            conn.close()
+
+    srv.close()
+    if done:
+        print("Setup complete — rebooting")
+        time.sleep(2)
+        import machine
+        machine.reset()
+
+def connect_wifi():
+    ssid, password = _load_wifi()
+    if ssid:
+        wlan = network.WLAN(network.STA_IF)
+        wlan.active(True)
+        if not wlan.isconnected():
+            print("Connecting to Wi-Fi:", ssid)
+            wlan.connect(ssid, password)
+            deadline = time.time() + 20
+            while not wlan.isconnected() and time.time() < deadline:
+                time.sleep(0.5)
+        if wlan.isconnected():
+            ip = wlan.ifconfig()[0]
+            print("Wi-Fi OK: http://{}".format(ip))
+            return ip
+        print("Wi-Fi failed — check credentials")
+    # No Wi-Fi config — run synchronous setup portal then reboot
+    run_setup_portal()
+    # If we get here, portal timed out — continue in hotspot mode
+    return "192.168.4.1"
+
+def _parse_form(body_bytes):
+    params = {}
+    try:
+        for pair in body_bytes.decode().split("&"):
+            if "=" in pair:
+                k, v = pair.split("=", 1)
+                params[_url_decode(k)] = _url_decode(v)
+    except Exception:
+        pass
+    return params
 
 # ── HTTP server ───────────────────────────────────────────────────────────────
 # ── Debug log ─────────────────────────────────────────────────────────────────
@@ -535,49 +603,7 @@ def _json(data, status=200):
     return _resp(status, "application/json", ujson.dumps(data))
 
 def _route(method, path, body_bytes):
-    global _clear_window, _setup_mode
-
-    # ── Captive portal detection — trigger phone's "Sign in" popup ───────────
-    _PORTAL_PATHS = (
-        "/generate_204", "/gen_204",          # Android
-        "/hotspot-detect.html",               # iOS / macOS
-        "/library/test/success.html",         # iOS
-        "/connecttest.txt", "/redirect",      # Windows
-        "/ncsi.txt",                          # Windows NCSI
-    )
-    if _setup_mode and path in _PORTAL_PATHS:
-        redir = "HTTP/1.0 302 Found\r\nLocation: http://192.168.4.1/\r\n\r\n".encode()
-        return redir
-
-    # ── First-boot setup portal ───────────────────────────────────────────────
-    if _setup_mode and path not in ("/wifi-save", "/wifi-skip"):
-        return _resp(200, "text/html", _SETUP_HTML)
-
-    if path == "/wifi-save" and method == "POST":
-        params = _parse_form(body_bytes)
-        ssid   = params.get("ssid", "").strip()
-        pw     = params.get("password", "")
-        if ssid:
-            _save_wifi(ssid, pw)
-            # Try connecting immediately
-            wlan = network.WLAN(network.STA_IF)
-            wlan.active(True)
-            wlan.connect(ssid, pw)
-            deadline = time.time() + 15
-            while not wlan.isconnected() and time.time() < deadline:
-                time.sleep(0.5)
-            if wlan.isconnected():
-                ip = wlan.ifconfig()[0]
-                _setup_mode = False
-                html = _SAVED_HTML.format(ssid=ssid, ip=ip)
-                return _resp(200, "text/html", html)
-        return _resp(200, "text/html", _SETUP_HTML)
-
-    if path == "/wifi-skip" and method == "POST":
-        _save_wifi("", "")   # save empty so we don't re-prompt
-        _setup_mode = False
-        redir = b"HTTP/1.0 302 Found\r\nLocation: /\r\n\r\n"
-        return redir
+    global _clear_window
 
     if path == "/api/wifi-status":
         wlan = network.WLAN(network.STA_IF)
@@ -663,7 +689,6 @@ def _route(method, path, body_bytes):
         info = {
             "mem_free": gc.mem_free(),
             "files": files,
-            "setup_mode": _setup_mode,
             "ble_state": _ble_state,
             "log": _log[-20:],
         }
@@ -704,13 +729,6 @@ async def _handle(reader, writer):
         method = parts[0]
         path   = parts[1].split("?")[0]
         _dbg("{} {}".format(method, path))
-
-        # In setup mode route everything through _route (serves setup HTML)
-        if _setup_mode:
-            response = _route(method, path, body)
-            writer.write(response)
-            await writer.drain()
-            return
 
         # Stream static files in chunks to avoid loading into RAM
         if path in _STATIC:
@@ -762,36 +780,13 @@ def _dns_response(data):
     except Exception:
         return b''
 
-async def dns_task():
-    import socket as _socket
-    udp = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    udp.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
-    udp.bind(('192.168.4.1', 53))
-    udp.setblocking(False)
-    print("DNS captive portal running")
-    while True:
-        try:
-            data, addr = udp.recvfrom(512)
-            if data:
-                resp = _dns_response(data)
-                if resp:
-                    udp.sendto(resp, addr)
-        except OSError:
-            pass
-        await asyncio.sleep(0.05)
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 async def main():
     load_settings()
-    connect_wifi()
+    connect_wifi()  # runs setup portal synchronously if no wifi.json, then reboots
     loop = asyncio.get_event_loop()
     loop.create_task(web_server())
-    if _setup_mode:
-        loop.create_task(dns_task())
-        # Skip BLE in setup mode — BLE scanning shares the radio with
-        # Wi-Fi AP on ESP32 and causes DHCP packet loss
-    else:
-        loop.create_task(ble_task())
+    loop.create_task(ble_task())
     # Save session every 5 minutes then reset counters
     while True:
         await asyncio.sleep(300)
