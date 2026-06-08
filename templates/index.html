@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upright GO 1</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <span class="brand-icon">🧍</span>
+      <span class="brand-name">Upright GO 1</span>
+    </div>
+    <div class="status-badge">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Searching…</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- Posture ring -->
+  <section class="posture-section">
+    <div class="posture-ring" id="postureRing">
+      <div class="posture-icon" id="postureIcon">📡</div>
+      <div class="posture-label" id="postureLabel">Searching for device…</div>
+    </div>
+  </section>
+
+  <!-- Live stats -->
+  <section class="stats-row">
+    <div class="stat-card">
+      <div class="stat-value" id="scoreValue">—</div>
+      <div class="stat-label">Score</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="durationValue">—</div>
+      <div class="stat-label">Session</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="slouchValue">—</div>
+      <div class="stat-label">Alerts</div>
+    </div>
+  </section>
+
+  <!-- All-time stats -->
+  <section class="card" id="alltimeCard">
+    <h2 class="card-title">All Time</h2>
+    <div class="alltime-row">
+      <div class="alltime-item">
+        <div class="alltime-value" id="atDays">—</div>
+        <div class="alltime-label">Days trained</div>
+      </div>
+      <div class="alltime-item">
+        <div class="alltime-value" id="atHours">—</div>
+        <div class="alltime-label">Total hours</div>
+      </div>
+      <div class="alltime-item">
+        <div class="alltime-value" id="atScore">—</div>
+        <div class="alltime-label">Avg score</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7-day history -->
+  <section class="card">
+    <h2 class="card-title">Last 7 Days</h2>
+    <div class="chart-wrap">
+      <canvas id="historyChart"></canvas>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Score</th>
+            <th>Time (min)</th>
+            <th>Alerts</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody">
+          <tr><td colspan="4" class="empty">No history yet — start a session!</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Guided exercises -->
+  <section class="card">
+    <h2 class="card-title">Guided Exercises</h2>
+    <p class="section-note">Short daily exercises recommended alongside posture training. Tap any card to search YouTube.</p>
+    <div class="exercises-grid" id="exercisesGrid"></div>
+  </section>
+
+  <!-- Settings -->
+  <section class="card">
+    <h2 class="card-title">Settings</h2>
+    <div class="setting-row">
+      <label for="cooldownRange">
+        Buzz cooldown — wait <strong id="cooldownDisplay">10</strong>s between alerts
+      </label>
+      <input type="range" id="cooldownRange" min="3" max="60" step="1" value="10">
+      <div class="range-labels"><span>3s (aggressive)</span><span>60s (gentle)</span></div>
+    </div>
+    <button class="btn" id="saveBtn">Save settings</button>
+  </section>
+
+</main>
+
+<footer>
+  <p>
+    Open-source replacement for the discontinued Upright app. &nbsp;·&nbsp;
+    BLE protocol by <a href="https://github.com/niltonheck/upright-go-1-reverse-engineering" target="_blank" rel="noopener">niltonheck</a>
+    &nbsp;·&nbsp; Not affiliated with Upright Technologies.
+  </p>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
