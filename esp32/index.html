@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upright GO 1</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand"><span>🧍</span><span class="brand-name">Upright GO 1</span></div>
+    <div class="status-badge">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Searching…</span>
+    </div>
+  </div>
+</header>
+
+<div class="mode-bar">
+  <div class="mode-inner">
+    <button class="mode-btn active" data-mode="desk">🖥️ At Desk</button>
+    <button class="mode-btn" data-mode="moving">🚶 Moving</button>
+    <button class="mode-btn" data-mode="break">☕ Break</button>
+  </div>
+</div>
+
+<main>
+
+  <section class="posture-section">
+    <div class="posture-ring" id="postureRing">
+      <div class="posture-icon" id="postureIcon">📡</div>
+      <div class="posture-label" id="postureLabel">Searching for device…</div>
+    </div>
+    <div class="pressure-wrap">
+      <div class="pressure-top">
+        <span class="pressure-lbl">Alert pressure</span>
+        <span id="pressurePct">0%</span>
+      </div>
+      <div class="pressure-track">
+        <div class="pressure-fill" id="pressureFill"></div>
+        <div class="pressure-marker" id="pressureMarker"></div>
+      </div>
+      <div class="pressure-hint">Buzz triggers when bar crosses the marker</div>
+    </div>
+  </section>
+
+  <section class="stats-row">
+    <div class="stat-card"><div class="stat-val" id="scoreValue">—</div><div class="stat-lbl">Score</div></div>
+    <div class="stat-card"><div class="stat-val" id="durationValue">—</div><div class="stat-lbl">Session</div></div>
+    <div class="stat-card"><div class="stat-val" id="slouchValue">—</div><div class="stat-lbl">Alerts</div></div>
+  </section>
+
+  <section class="card" id="coachingCard">
+    <div class="coaching-head">
+      <h2 class="card-title">Training Progress</h2>
+      <span class="phase-badge" id="phaseBadge">—</span>
+    </div>
+    <div class="grad-section">
+      <div class="grad-label">
+        Graduation: <strong><span id="gradDays">0</span> of 7</strong> qualifying days
+        <span class="small-note">(75%+ score &amp; daily goal per day)</span>
+      </div>
+      <div class="grad-segs" id="gradSegs">
+        <div class="grad-seg"></div><div class="grad-seg"></div>
+        <div class="grad-seg"></div><div class="grad-seg"></div>
+        <div class="grad-seg"></div><div class="grad-seg"></div>
+        <div class="grad-seg"></div>
+      </div>
+    </div>
+    <div class="coaching-stats">
+      <div class="c-stat"><div class="c-val" id="streakVal">0</div><div class="c-lbl">Streak</div></div>
+      <div class="c-stat"><div class="c-val" id="avgVal">—</div><div class="c-lbl">7-day avg</div></div>
+      <div class="c-stat"><div class="c-val" id="trendVal">→</div><div class="c-lbl">Trend</div></div>
+      <div class="c-stat"><div class="c-val" id="bestVal">—</div><div class="c-lbl">Best</div></div>
+    </div>
+    <div class="goal-row">
+      <div class="goal-label">Today: <span id="todayMin">0</span> / <span id="goalMin">20</span> min</div>
+      <div class="goal-track"><div class="goal-fill" id="goalFill"></div></div>
+    </div>
+    <div class="tip-card">
+      <span class="tip-icon">💡</span>
+      <span id="tipText">Loading…</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">All Time</h2>
+    <div class="alltime-row">
+      <div class="at-item"><div class="at-val" id="atDays">—</div><div class="at-lbl">Days trained</div></div>
+      <div class="at-item"><div class="at-val" id="atHours">—</div><div class="at-lbl">Total hours</div></div>
+      <div class="at-item"><div class="at-val" id="atScore">—</div><div class="at-lbl">Avg score</div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">Last 7 Days</h2>
+    <div class="chart-wrap"><canvas id="historyChart"></canvas></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Score</th><th>Min</th><th>Alerts</th></tr></thead>
+        <tbody id="historyBody">
+          <tr><td colspan="4" class="empty">No history yet — start a session!</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">Settings</h2>
+    <div class="setting-group">
+      <div class="setting-label">Sensitivity preset</div>
+      <div class="preset-row" id="presetRow">
+        <button class="preset-btn" data-preset="lenient">Lenient</button>
+        <button class="preset-btn active" data-preset="normal">Normal</button>
+        <button class="preset-btn" data-preset="strict">Strict</button>
+        <button class="preset-btn" data-preset="custom">Custom</button>
+      </div>
+      <div class="preset-desc" id="presetDesc">Alerts after ~5s of slouching. 15s between alerts.</div>
+    </div>
+    <div class="setting-group" id="customGroup">
+      <div class="slider-block">
+        <label>Alert delay: <strong id="windowDisplay">5</strong>s
+          <span class="hint">how long slouch must persist before buzzing</span></label>
+        <input type="range" id="windowRange" min="1" max="15" step="0.5" value="5">
+      </div>
+      <div class="slider-block">
+        <label>Alert threshold: <strong id="thresholdDisplay">60</strong>%
+          <span class="hint">% of the alert window showing slouch</span></label>
+        <input type="range" id="thresholdRange" min="30" max="90" step="5" value="60">
+      </div>
+      <div class="slider-block">
+        <label>Buzz cooldown: <strong id="cooldownDisplay">15</strong>s
+          <span class="hint">minimum gap between buzzes</span></label>
+        <input type="range" id="cooldownRange" min="3" max="120" step="1" value="15">
+      </div>
+    </div>
+    <div class="setting-group">
+      <div class="slider-block">
+        <label>Daily goal: <strong id="goalDisplay">20</strong> minutes</label>
+        <input type="range" id="goalRange" min="5" max="60" step="5" value="20">
+      </div>
+    </div>
+    <button class="btn" id="saveBtn">Save settings</button>
+  </section>
+
+</main>
+
+<footer>
+  <p>
+    Open-source Upright GO 1 dashboard &nbsp;·&nbsp;
+    BLE protocol by <a href="https://github.com/niltonheck/upright-go-1-reverse-engineering" target="_blank" rel="noopener">niltonheck</a>
+    &nbsp;·&nbsp; Not affiliated with Upright Technologies.
+  </p>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>
