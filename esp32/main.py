@@ -415,7 +415,7 @@ font-size:1rem;font-weight:600;margin-bottom:.5rem}
 </style></head><body><div class="card">
 <h2>Upright GO 1</h2>
 <p>Enter your home Wi-Fi to connect — or skip to use this hotspot directly.
-The dashboard works either way. Hotspot password: <strong>posture1</strong></p>
+The dashboard works either way.</p>
 <form method="POST" action="/wifi-save">
 <input name="ssid" placeholder="Wi-Fi network name" required autocomplete="off">
 <input name="password" type="password" placeholder="Wi-Fi password" autocomplete="off">
@@ -445,14 +445,11 @@ margin:1rem 0}}</style></head><body><div class="card">
 </div></body></html>
 """
 
-def _start_ap(ssid="UprightGO-Setup", password="posture1"):
+def _start_ap(ssid="UprightGO-Setup"):
     ap = network.WLAN(network.AP_IF)
-    ap.active(False)
-    time.sleep(0.5)
     ap.active(True)
-    ap.config(essid=ssid, password=password, authmode=4)  # WPA2
-    time.sleep(0.5)
-    print("AP started: {} / {} — http://192.168.4.1".format(ssid, password))
+    ap.config(essid=ssid, authmode=0)
+    print("AP: {} (open) — http://192.168.4.1".format(ssid))
     return "192.168.4.1"
 
 def connect_wifi():
@@ -754,7 +751,7 @@ async def dns_task():
     import socket as _socket
     udp = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
     udp.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
-    udp.bind(('0.0.0.0', 53))
+    udp.bind(('192.168.4.1', 53))
     udp.setblocking(False)
     print("DNS captive portal running")
     while True:
