@@ -415,7 +415,7 @@ font-size:1rem;font-weight:600;margin-bottom:.5rem}
 </style></head><body><div class="card">
 <h2>Upright GO 1</h2>
 <p>Enter your home Wi-Fi to connect — or skip to use this hotspot directly.
-The dashboard works either way.</p>
+The dashboard works either way. Hotspot password: <strong>uprightgo</strong></p>
 <form method="POST" action="/wifi-save">
 <input name="ssid" placeholder="Wi-Fi network name" required autocomplete="off">
 <input name="password" type="password" placeholder="Wi-Fi password" autocomplete="off">
@@ -448,8 +448,8 @@ margin:1rem 0}}</style></head><body><div class="card">
 def _start_ap(ssid="UprightGO-Setup"):
     ap = network.WLAN(network.AP_IF)
     ap.active(True)
-    ap.config(essid=ssid, authmode=0)
-    print("AP: {} (open) — http://192.168.4.1".format(ssid))
+    ap.config(essid=ssid, password="uprightgo", authmode=3)
+    print("AP: {} / uprightgo — http://192.168.4.1".format(ssid))
     return "192.168.4.1"
 
 def connect_wifi():
@@ -511,6 +511,11 @@ def _dbg(msg):
     _log.append(msg)
     if len(_log) > 40:
         _log.pop(0)
+    try:
+        with open("debug.log", "a") as f:
+            f.write(msg + "\n")
+    except Exception:
+        pass
 
 def _file_size(path):
     try:
@@ -675,9 +680,11 @@ _STATIC = {
 
 async def _handle(reader, writer):
     path = "?"
+    _dbg("conn from client, mem={}".format(gc.mem_free()))
     try:
         req_line = await reader.readline()
         if not req_line:
+            _dbg("empty request")
             return
         headers = {}
         while True:
@@ -696,18 +703,26 @@ async def _handle(reader, writer):
             return
         method = parts[0]
         path   = parts[1].split("?")[0]
-        _dbg("{} {} mem={}".format(method, path, gc.mem_free()))
+        _dbg("{} {}".format(method, path))
 
-        # Stream static files directly to avoid loading into RAM
+        # In setup mode route everything through _route (serves setup HTML)
+        if _setup_mode:
+            response = _route(method, path, body)
+            writer.write(response)
+            await writer.drain()
+            return
+
+        # Stream static files in chunks to avoid loading into RAM
         if path in _STATIC:
             fname, ctype = _STATIC[path]
             sz = _file_size(fname)
+            _dbg("static {} size={}".format(fname, sz))
             if sz < 0:
                 writer.write(b"HTTP/1.0 404 Not Found\r\n\r\nNot found")
                 await writer.drain()
                 return
-            hdr = "HTTP/1.0 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n".format(ctype, sz)
-            writer.write(hdr.encode())
+            writer.write("HTTP/1.0 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n".format(ctype, sz).encode())
+            await writer.drain()
             with open(fname, "rb") as f:
                 while True:
                     chunk = f.read(512)
