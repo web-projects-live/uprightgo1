@@ -222,6 +222,37 @@ async function pollStatus() {
   }
 }
 
+// ── Wi-Fi settings ────────────────────────────────────────────────────────────
+async function loadWifiStatus() {
+  try {
+    const d = await (await fetch("/api/wifi-status")).json();
+    const el = document.getElementById("wifiStatus");
+    if (d.connected && d.ssid) {
+      el.textContent = "Connected to " + d.ssid + " (" + d.ip + ")";
+      el.style.color = "var(--good)";
+    } else if (d.ssid) {
+      el.textContent = "Saved network: " + d.ssid + " (not connected)";
+      el.style.color = "var(--gold)";
+    } else {
+      el.textContent = "Hotspot-only mode — no Wi-Fi configured.";
+      el.style.color = "var(--accent)";
+    }
+    document.getElementById("wifiSsid").value = d.ssid || "";
+  } catch (e) { console.error("loadWifiStatus", e); }
+}
+
+document.getElementById("wifiSaveBtn").addEventListener("click", async () => {
+  const ssid = document.getElementById("wifiSsid").value.trim();
+  const pass = document.getElementById("wifiPass").value;
+  await fetch("/api/wifi-save", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ssid, password: pass }),
+  });
+  const btn = document.getElementById("wifiSaveBtn");
+  btn.textContent = "Saved — reboot to apply";
+  setTimeout(() => { btn.textContent = "Save Wi-Fi (reboot to apply)"; }, 3000);
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 (async () => {
   updatePressureMarker();
@@ -229,6 +260,7 @@ async function pollStatus() {
   await loadCoaching();
   await loadHistory();
   await loadAllTime();
+  await loadWifiStatus();
   setInterval(pollStatus, 500);
   setInterval(async () => { await loadCoaching(); await loadHistory(); await loadAllTime(); }, 5 * 60 * 1000);
 })();

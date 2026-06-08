@@ -146,6 +146,23 @@
     <button class="btn" id="saveBtn">Save settings</button>
   </section>
 
+  <section class="card">
+    <h2 class="card-title">Wi-Fi</h2>
+    <p class="section-note" id="wifiStatus">Checking…</p>
+    <div class="setting-group">
+      <div class="slider-block">
+        <label>Network name (SSID)</label>
+        <input class="text-input" type="text" id="wifiSsid" placeholder="Leave blank to use hotspot only" autocomplete="off">
+      </div>
+      <div class="slider-block">
+        <label>Password</label>
+        <input class="text-input" type="password" id="wifiPass" placeholder="Wi-Fi password" autocomplete="off">
+      </div>
+    </div>
+    <button class="btn" id="wifiSaveBtn">Save Wi-Fi (reboot to apply)</button>
+    <p class="section-note" style="margin-top:.5rem">Wi-Fi is optional — the dashboard works over the built-in hotspot too.</p>
+  </section>
+
 </main>
 
 <footer>

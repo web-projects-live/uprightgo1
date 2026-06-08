@@ -6,3 +6,4 @@ __pycache__/
 venv/
 .claude/
 posture.db
+esp32/config.py

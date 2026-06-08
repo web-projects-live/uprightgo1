@@ -8,16 +8,22 @@ Credits: BLE protocol by niltonheck/upright-go-1-reverse-engineering
 
 import asyncio
 import json
+import platform
 import random
 import socket
 import sqlite3
+import sys
 import threading
 import time
 from datetime import date, timedelta
 
-from bleak import BleakClient, BleakScanner
-from bleak.exc import BleakError
 from flask import Flask, Response, jsonify, render_template, request
+
+# bleak doesn't support Android — skip BLE gracefully
+_BLE_SUPPORTED = not (sys.platform == "linux" and "android" in platform.release().lower())
+if _BLE_SUPPORTED:
+    from bleak import BleakClient, BleakScanner
+    from bleak.exc import BleakError
 
 DEVICE_NAME    = "UprightGO"
 ANGLE_CHAR     = "0000aaca-0000-1000-8000-00805f9b34fb"
@@ -400,6 +406,9 @@ async def _ble_loop():
 
 
 def _start_ble():
+    if not _BLE_SUPPORTED:
+        print("BLE: not supported on this platform — running in dashboard-only mode")
+        return
     def run():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)

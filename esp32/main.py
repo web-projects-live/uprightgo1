@@ -2,8 +2,12 @@
 Upright GO 1 — ESP32 MicroPython firmware
 Connects to Upright GO 1 via BLE, serves web dashboard over Wi-Fi on port 80.
 
-Upload all files in esp32/ to the root of the ESP32 filesystem.
-Copy config.py.example -> config.py and fill in your Wi-Fi credentials.
+First boot: ESP32 starts a hotspot called "UprightGO-Setup" (no password).
+Connect to it and open http://192.168.4.1 to configure Wi-Fi — or skip Wi-Fi
+entirely and just use the hotspot directly. Settings are saved to the device.
+
+Wi-Fi is optional: the dashboard and BLE posture tracking work fine over the
+built-in hotspot with no router involved.
 
 SAFETY: Only reads aaca (angle) and writes 0x00/0x01 to aad3 (vibration).
 Credits: BLE protocol by niltonheck/upright-go-1-reverse-engineering
@@ -17,14 +21,20 @@ import time
 import struct
 import gc
 
-# ── Config ────────────────────────────────────────────────────────────────────
-try:
-    import config
-    WIFI_SSID = config.WIFI_SSID
-    WIFI_PASS = config.WIFI_PASS
-except ImportError:
-    WIFI_SSID = "YOUR_WIFI_SSID"
-    WIFI_PASS = "YOUR_WIFI_PASSWORD"
+# ── Wi-Fi config (saved to device, never hard-coded) ─────────────────────────
+WIFI_CONFIG_FILE = "wifi.json"
+
+def _load_wifi():
+    try:
+        with open(WIFI_CONFIG_FILE) as f:
+            d = ujson.load(f)
+            return d.get("ssid", ""), d.get("password", "")
+    except Exception:
+        return "", ""
+
+def _save_wifi(ssid, password):
+    with open(WIFI_CONFIG_FILE, "w") as f:
+        ujson.dump({"ssid": ssid, "password": password}, f)
 
 DEVICE_NAME   = "UprightGO"
 POLL_INTERVAL = 0.15
@@ -376,25 +386,118 @@ async def ble_task():
             await asyncio.sleep(0.5)
 
 # ── Wi-Fi ─────────────────────────────────────────────────────────────────────
-def connect_wifi():
-    wlan = network.WLAN(network.STA_IF)
-    wlan.active(True)
-    if not wlan.isconnected():
-        print("Connecting to Wi-Fi:", WIFI_SSID)
-        wlan.connect(WIFI_SSID, WIFI_PASS)
-        deadline = time.time() + 20
-        while not wlan.isconnected() and time.time() < deadline:
-            time.sleep(0.5)
-    if wlan.isconnected():
-        ip = wlan.ifconfig()[0]
-        print("Wi-Fi OK: http://{}".format(ip))
-        return ip
-    # Fall back to AP mode
-    print("Wi-Fi failed — AP mode: UprightGO / posture123")
+_setup_mode = False   # True while showing the first-boot setup portal
+
+_SETUP_HTML = """\
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Upright GO — Wi-Fi Setup</title>
+<style>
+*{box-sizing:border-box}body{font-family:sans-serif;background:#1a1d2e;color:#e2e8f0;
+display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+.card{background:#242840;border-radius:12px;padding:2rem;max-width:360px;width:100%}
+h2{margin:0 0 .5rem}p{color:#8892a4;margin:0 0 1.5rem;font-size:.9rem}
+input{width:100%;padding:.7rem 1rem;border-radius:8px;border:1px solid #363b5e;
+background:#1a1d2e;color:#e2e8f0;margin-bottom:.75rem;font-size:1rem}
+button{width:100%;padding:.8rem;border-radius:8px;border:none;cursor:pointer;
+font-size:1rem;font-weight:600;margin-bottom:.5rem}
+.btn-pri{background:#7c6aff;color:#fff}.btn-skip{background:#363b5e;color:#8892a4}
+.msg{text-align:center;margin-top:1rem;font-size:.85rem;color:#00d4aa}
+</style></head><body><div class="card">
+<h2>Upright GO 1</h2>
+<p>Enter your home Wi-Fi to connect — or skip to use this hotspot directly.
+The dashboard works either way.</p>
+<form method="POST" action="/wifi-save">
+<input name="ssid" placeholder="Wi-Fi network name" required autocomplete="off">
+<input name="password" type="password" placeholder="Wi-Fi password" autocomplete="off">
+<button class="btn-pri" type="submit">Save &amp; connect</button>
+</form>
+<form method="POST" action="/wifi-skip">
+<button class="btn-skip" type="submit">Skip — use hotspot only</button>
+</form>
+<p class="msg" id="m"></p>
+</div></body></html>
+"""
+
+_SAVED_HTML = """\
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="8;url=http://{ip}">
+<title>Upright GO — Connecting</title>
+<style>body{{font-family:sans-serif;background:#1a1d2e;color:#e2e8f0;
+display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}}
+.card{{background:#242840;border-radius:12px;padding:2rem;max-width:360px;
+width:100%;text-align:center}}.ip{{color:#00d4aa;font-size:1.2rem;font-weight:700;
+margin:1rem 0}}</style></head><body><div class="card">
+<h2>Connecting…</h2>
+<p>Joining <strong>{ssid}</strong>. This page will redirect in ~8 seconds.</p>
+<div class="ip"><a href="http://{ip}" style="color:#00d4aa">http://{ip}</a></div>
+<p style="color:#8892a4;font-size:.85rem">Bookmark that address on your home Wi-Fi.</p>
+</div></body></html>
+"""
+
+def _start_ap(ssid="UprightGO-Setup", password=""):
     ap = network.WLAN(network.AP_IF)
     ap.active(True)
-    ap.config(essid="UprightGO", password="posture123")
+    cfg = {"essid": ssid}
+    if password:
+        cfg["password"] = password
+    else:
+        cfg["authmode"] = 0  # open network
+    ap.config(**cfg)
+    print("AP started: {} — http://192.168.4.1".format(ssid))
     return "192.168.4.1"
+
+def connect_wifi():
+    global _setup_mode
+    ssid, password = _load_wifi()
+
+    if ssid:
+        wlan = network.WLAN(network.STA_IF)
+        wlan.active(True)
+        if not wlan.isconnected():
+            print("Connecting to Wi-Fi:", ssid)
+            wlan.connect(ssid, password)
+            deadline = time.time() + 20
+            while not wlan.isconnected() and time.time() < deadline:
+                time.sleep(0.5)
+        if wlan.isconnected():
+            ip = wlan.ifconfig()[0]
+            print("Wi-Fi OK: http://{}".format(ip))
+            return ip
+        print("Wi-Fi failed — starting setup hotspot")
+
+    # No config or failed — run setup portal
+    _setup_mode = True
+    return _start_ap()
+
+def _parse_form(body_bytes):
+    """Parse application/x-www-form-urlencoded body."""
+    params = {}
+    try:
+        for pair in body_bytes.decode().split("&"):
+            if "=" in pair:
+                k, v = pair.split("=", 1)
+                params[_url_decode(k)] = _url_decode(v)
+    except Exception:
+        pass
+    return params
+
+def _url_decode(s):
+    s = s.replace("+", " ")
+    out = ""
+    i = 0
+    while i < len(s):
+        if s[i] == "%" and i + 2 < len(s):
+            try:
+                out += chr(int(s[i+1:i+3], 16))
+                i += 3
+                continue
+            except Exception:
+                pass
+        out += s[i]
+        i += 1
+    return out
 
 # ── HTTP server ───────────────────────────────────────────────────────────────
 def _read_file(path):
@@ -415,9 +518,53 @@ def _json(data, status=200):
     return _resp(status, "application/json", ujson.dumps(data))
 
 def _route(method, path, body_bytes):
-    global _clear_window
+    global _clear_window, _setup_mode
 
-    # Static files
+    # ── First-boot setup portal ───────────────────────────────────────────────
+    if _setup_mode and path not in ("/wifi-save", "/wifi-skip"):
+        return _resp(200, "text/html", _SETUP_HTML)
+
+    if path == "/wifi-save" and method == "POST":
+        params = _parse_form(body_bytes)
+        ssid   = params.get("ssid", "").strip()
+        pw     = params.get("password", "")
+        if ssid:
+            _save_wifi(ssid, pw)
+            # Try connecting immediately
+            wlan = network.WLAN(network.STA_IF)
+            wlan.active(True)
+            wlan.connect(ssid, pw)
+            deadline = time.time() + 15
+            while not wlan.isconnected() and time.time() < deadline:
+                time.sleep(0.5)
+            if wlan.isconnected():
+                ip = wlan.ifconfig()[0]
+                _setup_mode = False
+                html = _SAVED_HTML.format(ssid=ssid, ip=ip)
+                return _resp(200, "text/html", html)
+        return _resp(200, "text/html", _SETUP_HTML)
+
+    if path == "/wifi-skip" and method == "POST":
+        _save_wifi("", "")   # save empty so we don't re-prompt
+        _setup_mode = False
+        redir = b"HTTP/1.0 302 Found\r\nLocation: /\r\n\r\n"
+        return redir
+
+    if path == "/api/wifi-status":
+        wlan = network.WLAN(network.STA_IF)
+        ssid, _ = _load_wifi()
+        return _json({"ssid": ssid, "connected": wlan.isconnected(),
+                      "ip": wlan.ifconfig()[0] if wlan.isconnected() else ""})
+
+    if path == "/api/wifi-save" and method == "POST":
+        try:
+            data = ujson.loads(body_bytes) if body_bytes else {}
+            _save_wifi(data.get("ssid", ""), data.get("password", ""))
+            return _json({"ok": True, "note": "Reboot to apply"})
+        except Exception as e:
+            return _json({"error": str(e)}, 400)
+
+    # ── Static files ──────────────────────────────────────────────────────────
     if path in ("/", "/index.html"):
         f = _read_file("index.html")
         return _resp(200, "text/html", f) if f else _resp(404, "text/plain", b"Not found")
