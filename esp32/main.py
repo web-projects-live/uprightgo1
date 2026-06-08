@@ -30,7 +30,16 @@ def _load_wifi():
             d = ujson.load(f)
             return d.get("ssid", ""), d.get("password", "")
     except Exception:
-        return "", ""
+        pass
+    # Migrate from old config.py if present
+    try:
+        import config as _cfg
+        if hasattr(_cfg, "WIFI_SSID") and _cfg.WIFI_SSID not in ("", "YOUR_WIFI_SSID"):
+            _save_wifi(_cfg.WIFI_SSID, getattr(_cfg, "WIFI_PASS", ""))
+            return _cfg.WIFI_SSID, getattr(_cfg, "WIFI_PASS", "")
+    except Exception:
+        pass
+    return "", ""
 
 def _save_wifi(ssid, password):
     with open(WIFI_CONFIG_FILE, "w") as f:
