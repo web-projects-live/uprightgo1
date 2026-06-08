@@ -641,12 +641,12 @@ def _route(method, path, body_bytes):
 
 async def _handle(reader, writer):
     try:
-        req_line = await asyncio.wait_for(reader.readline(), 5)
+        req_line = await reader.readline()
         if not req_line:
             return
         headers = {}
         while True:
-            line = await asyncio.wait_for(reader.readline(), 3)
+            line = await reader.readline()
             if not line or line == b"\r\n":
                 break
             if b":" in line:
@@ -668,14 +668,13 @@ async def _handle(reader, writer):
         print("HTTP err:", e)
     finally:
         writer.close()
-        await writer.wait_closed()
         gc.collect()
 
 async def web_server():
-    server = await asyncio.start_server(_handle, "0.0.0.0", 80)
+    await asyncio.start_server(_handle, "0.0.0.0", 80)
     print("Web server on port 80")
-    async with server:
-        await server.wait_closed()
+    while True:
+        await asyncio.sleep(3600)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 async def main():
