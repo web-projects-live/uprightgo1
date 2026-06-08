@@ -509,12 +509,20 @@ def _url_decode(s):
     return out
 
 # ── HTTP server ───────────────────────────────────────────────────────────────
-def _read_file(path):
+# ── Debug log ─────────────────────────────────────────────────────────────────
+_log = []
+def _dbg(msg):
+    print(msg)
+    _log.append(msg)
+    if len(_log) > 40:
+        _log.pop(0)
+
+def _file_size(path):
     try:
-        with open(path) as f:
-            return f.read()
+        import uos
+        return uos.stat(path)[6]
     except Exception:
-        return None
+        return -1
 
 def _resp(status, ctype, body):
     if isinstance(body, str):
@@ -649,9 +657,29 @@ def _route(method, path, body_bytes):
         except Exception as e:
             return _json({"error": str(e)}, 400)
 
+    if path == "/debug":
+        import uos
+        files = [(f, uos.stat(f)[6]) for f in uos.listdir('/')]
+        info = {
+            "mem_free": gc.mem_free(),
+            "files": files,
+            "setup_mode": _setup_mode,
+            "ble_state": _ble_state,
+            "log": _log[-20:],
+        }
+        return _json(info)
+
     return _resp(404, "text/plain", b"Not found")
 
+_STATIC = {
+    "/index.html": ("index.html", "text/html"),
+    "/":           ("index.html", "text/html"),
+    "/style.css":  ("style.css",  "text/css"),
+    "/app.js":     ("app.js",     "application/javascript"),
+}
+
 async def _handle(reader, writer):
+    path = "?"
     try:
         req_line = await reader.readline()
         if not req_line:
@@ -671,13 +699,37 @@ async def _handle(reader, writer):
         parts = req_line.decode().strip().split()
         if len(parts) < 2:
             return
-        method, path = parts[0], parts[1].split("?")[0]
+        method = parts[0]
+        path   = parts[1].split("?")[0]
+        _dbg("{} {} mem={}".format(method, path, gc.mem_free()))
+
+        # Stream static files directly to avoid loading into RAM
+        if path in _STATIC:
+            fname, ctype = _STATIC[path]
+            sz = _file_size(fname)
+            if sz < 0:
+                writer.write(b"HTTP/1.0 404 Not Found\r\n\r\nNot found")
+                await writer.drain()
+                return
+            hdr = "HTTP/1.0 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n".format(ctype, sz)
+            writer.write(hdr.encode())
+            with open(fname, "rb") as f:
+                while True:
+                    chunk = f.read(512)
+                    if not chunk:
+                        break
+                    writer.write(chunk)
+                    await writer.drain()
+            return
 
         response = _route(method, path, body)
         writer.write(response)
         await writer.drain()
     except Exception as e:
-        print("HTTP err:", e)
+        import sys, uio
+        buf = uio.StringIO()
+        sys.print_exception(e, buf)
+        _dbg("HTTP err {} {}: {}".format(path, e, buf.getvalue()))
     finally:
         writer.close()
         gc.collect()
