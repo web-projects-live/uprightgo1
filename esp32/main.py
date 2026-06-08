@@ -529,6 +529,18 @@ def _json(data, status=200):
 def _route(method, path, body_bytes):
     global _clear_window, _setup_mode
 
+    # ── Captive portal detection — trigger phone's "Sign in" popup ───────────
+    _PORTAL_PATHS = (
+        "/generate_204", "/gen_204",          # Android
+        "/hotspot-detect.html",               # iOS / macOS
+        "/library/test/success.html",         # iOS
+        "/connecttest.txt", "/redirect",      # Windows
+        "/ncsi.txt",                          # Windows NCSI
+    )
+    if _setup_mode and path in _PORTAL_PATHS:
+        redir = "HTTP/1.0 302 Found\r\nLocation: http://192.168.4.1/\r\n\r\n".encode()
+        return redir
+
     # ── First-boot setup portal ───────────────────────────────────────────────
     if _setup_mode and path not in ("/wifi-save", "/wifi-skip"):
         return _resp(200, "text/html", _SETUP_HTML)
@@ -676,6 +688,36 @@ async def web_server():
     while True:
         await asyncio.sleep(3600)
 
+# ── Captive portal DNS server ─────────────────────────────────────────────────
+def _dns_response(data):
+    try:
+        # Reply with same transaction ID, mark as response, 1 answer
+        header = data[:2] + b'\x81\x80' + data[4:6] + b'\x00\x01\x00\x00\x00\x00'
+        question = data[12:]
+        # Answer: pointer to question name, type A, class IN, TTL 60s, 192.168.4.1
+        answer = b'\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04\xc0\xa8\x04\x01'
+        return header + question + answer
+    except Exception:
+        return b''
+
+async def dns_task():
+    import socket as _socket
+    udp = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+    udp.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+    udp.bind(('0.0.0.0', 53))
+    udp.setblocking(False)
+    print("DNS captive portal running")
+    while True:
+        try:
+            data, addr = udp.recvfrom(512)
+            if data:
+                resp = _dns_response(data)
+                if resp:
+                    udp.sendto(resp, addr)
+        except OSError:
+            pass
+        await asyncio.sleep(0.05)
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 async def main():
     load_settings()
@@ -683,6 +725,8 @@ async def main():
     loop = asyncio.get_event_loop()
     loop.create_task(ble_task())
     loop.create_task(web_server())
+    if _setup_mode:
+        loop.create_task(dns_task())
     # Save session every 5 minutes then reset counters
     while True:
         await asyncio.sleep(300)
