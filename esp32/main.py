@@ -415,7 +415,7 @@ font-size:1rem;font-weight:600;margin-bottom:.5rem}
 </style></head><body><div class="card">
 <h2>Upright GO 1</h2>
 <p>Enter your home Wi-Fi to connect — or skip to use this hotspot directly.
-The dashboard works either way. Hotspot password: <strong>uprightgo</strong></p>
+The dashboard works either way.</p>
 <form method="POST" action="/wifi-save">
 <input name="ssid" placeholder="Wi-Fi network name" required autocomplete="off">
 <input name="password" type="password" placeholder="Wi-Fi password" autocomplete="off">
@@ -448,8 +448,8 @@ margin:1rem 0}}</style></head><body><div class="card">
 def _start_ap(ssid="UprightGO-Setup"):
     ap = network.WLAN(network.AP_IF)
     ap.active(True)
-    ap.config(essid=ssid, password="uprightgo", authmode=3)
-    print("AP: {} / uprightgo — http://192.168.4.1".format(ssid))
+    ap.config(essid=ssid, authmode=0)
+    print("AP: {} (open, no password) — http://192.168.4.1".format(ssid))
     return "192.168.4.1"
 
 def connect_wifi():
@@ -785,10 +785,13 @@ async def main():
     load_settings()
     connect_wifi()
     loop = asyncio.get_event_loop()
-    loop.create_task(ble_task())
     loop.create_task(web_server())
     if _setup_mode:
         loop.create_task(dns_task())
+        # Skip BLE in setup mode — BLE scanning shares the radio with
+        # Wi-Fi AP on ESP32 and causes DHCP packet loss
+    else:
+        loop.create_task(ble_task())
     # Save session every 5 minutes then reset counters
     while True:
         await asyncio.sleep(300)
