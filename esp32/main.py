@@ -352,13 +352,9 @@ async def _buzz():
 
 # ── BLE task ──────────────────────────────────────────────────────────────────
 async def ble_task():
-    global _ble, _ble_state, _found_addr, _found_addr_type
+    global _ble_state, _found_addr, _found_addr_type
     global _pending_read, _read_result
-
-    _ble = ubluetooth.BLE()
-    _ble.active(True)
-    _ble.irq(_ble_irq)
-
+    # BLE already initialized before asyncio started — just start scanning
     while True:
         if _ble_state == "idle":
             _found_addr = None
@@ -696,98 +692,94 @@ def _route(method, path, body_bytes):
 
     return _resp(404, "text/plain", b"Not found")
 
+# ── HTTP server (runs in a thread — avoids BLE/asyncio poll conflict) ─────────
 _STATIC = {
-    "/index.html": ("index.html", "text/html"),
     "/":           ("index.html", "text/html"),
+    "/index.html": ("index.html", "text/html"),
     "/style.css":  ("style.css",  "text/css"),
     "/app.js":     ("app.js",     "application/javascript"),
 }
 
-async def _handle(reader, writer):
-    path = "?"
-    _dbg("conn from client, mem={}".format(gc.mem_free()))
+def _handle_sync(conn):
+    import uio, sys
     try:
-        req_line = await reader.readline()
-        if not req_line:
-            _dbg("empty request")
-            return
-        headers = {}
-        while True:
-            line = await reader.readline()
-            if not line or line == b"\r\n":
+        conn.settimeout(5)
+        req = b""
+        while b"\r\n\r\n" not in req:
+            chunk = conn.recv(256)
+            if not chunk:
                 break
-            if b":" in line:
-                k, v = line.split(b":", 1)
-                headers[k.strip().lower()] = v.strip()
+            req += chunk
+            if len(req) > 4096:
+                break
 
-        cl   = int(headers.get(b"content-length", b"0"))
-        body = await reader.read(cl) if cl else b""
-
-        parts = req_line.decode().strip().split()
+        line1 = req.split(b"\r\n")[0]
+        parts = line1.split(b" ")
         if len(parts) < 2:
             return
-        method = parts[0]
-        path   = parts[1].split("?")[0]
-        _dbg("{} {}".format(method, path))
+        method = parts[0].decode()
+        path   = parts[1].split(b"?")[0].decode()
+        _dbg("{} {} mem={}".format(method, path, gc.mem_free()))
 
-        # Stream static files in chunks to avoid loading into RAM
+        # Read body for POST
+        cl = 0
+        for ln in req.split(b"\r\n"):
+            if ln.lower().startswith(b"content-length:"):
+                try: cl = int(ln.split(b":")[1].strip())
+                except: pass
+        body = req[req.find(b"\r\n\r\n") + 4:]
+        while len(body) < cl:
+            chunk = conn.recv(256)
+            if not chunk: break
+            body += chunk
+
+        # Serve static files in chunks
         if path in _STATIC:
             fname, ctype = _STATIC[path]
             sz = _file_size(fname)
-            _dbg("static {} size={}".format(fname, sz))
             if sz < 0:
-                writer.write(b"HTTP/1.0 404 Not Found\r\n\r\nNot found")
-                await writer.drain()
+                conn.send(b"HTTP/1.0 404 Not Found\r\n\r\nNot found")
                 return
-            writer.write("HTTP/1.0 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n".format(ctype, sz).encode())
-            await writer.drain()
+            conn.send("HTTP/1.0 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n".format(ctype, sz).encode())
             with open(fname, "rb") as f:
                 while True:
                     chunk = f.read(512)
-                    if not chunk:
-                        break
-                    writer.write(chunk)
-                    await writer.drain()
+                    if not chunk: break
+                    conn.send(chunk)
             return
 
         response = _route(method, path, body)
-        writer.write(response)
-        await writer.drain()
+        conn.send(response)
+
     except Exception as e:
-        import sys, uio
         buf = uio.StringIO()
         sys.print_exception(e, buf)
-        _dbg("HTTP err {} {}: {}".format(path, e, buf.getvalue()))
-    finally:
-        writer.close()
-        gc.collect()
+        _dbg("HTTP err: " + buf.getvalue())
 
-async def web_server():
-    await asyncio.start_server(_handle, "0.0.0.0", 80)
-    print("Web server on port 80")
+def _http_server_thread():
+    import socket as _socket
+    srv = _socket.socket()
+    srv.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+    srv.bind(("0.0.0.0", 80))
+    srv.listen(2)
+    print("HTTP server on port 80")
     while True:
-        await asyncio.sleep(3600)
-
-# ── Captive portal DNS server ─────────────────────────────────────────────────
-def _dns_response(data):
-    try:
-        # Reply with same transaction ID, mark as response, 1 answer
-        header = data[:2] + b'\x81\x80' + data[4:6] + b'\x00\x01\x00\x00\x00\x00'
-        question = data[12:]
-        # Answer: pointer to question name, type A, class IN, TTL 60s, 192.168.4.1
-        answer = b'\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04\xc0\xa8\x04\x01'
-        return header + question + answer
-    except Exception:
-        return b''
+        try:
+            conn, addr = srv.accept()
+            try:
+                _handle_sync(conn)
+            except Exception as e:
+                _dbg("conn err: " + str(e))
+            finally:
+                conn.close()
+                gc.collect()
+        except Exception as e:
+            _dbg("accept err: " + str(e))
+            time.sleep(1)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 async def main():
-    load_settings()
-    connect_wifi()  # runs setup portal synchronously if no wifi.json, then reboots
-    loop = asyncio.get_event_loop()
-    loop.create_task(web_server())
-    loop.create_task(ble_task())
-    # Save session every 5 minutes then reset counters
+    asyncio.get_event_loop().create_task(ble_task())
     while True:
         await asyncio.sleep(300)
         if state["connected"] and state["total_seconds"] > 60:
@@ -795,5 +787,18 @@ async def main():
             state["total_seconds"] = 0.0
             state["good_seconds"]  = 0.0
             state["slouch_count"]  = 0
+
+load_settings()
+connect_wifi()
+
+# Start HTTP server in a thread (separate from asyncio — avoids BLE poll conflict)
+import _thread
+_thread.start_new_thread(_http_server_thread, ())
+
+# Init and start BLE, then run asyncio event loop for BLE only
+_ble = ubluetooth.BLE()
+_ble.active(True)
+_ble.irq(_ble_irq)
+print("BLE ready")
 
 asyncio.run(main())
