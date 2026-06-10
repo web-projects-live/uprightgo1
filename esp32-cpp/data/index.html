@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upright Go</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- ── Setup portal (shown when device is in AP mode) ──────────────────────── -->
+<div id="setup-screen" class="screen" style="display:none">
+  <div class="setup-card">
+    <div class="setup-logo">
+      <div class="setup-icon">↑</div>
+      <h1>Upright Go Setup</h1>
+      <p class="setup-sub">Connect your device to your Wi-Fi network</p>
+    </div>
+
+    <div id="setup-form-wrap">
+      <div class="field-group">
+        <label for="setup-ssid">Network name (SSID)</label>
+        <input type="text" id="setup-ssid" placeholder="Your Wi-Fi network" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="field-group">
+        <label for="setup-pass">Password</label>
+        <input type="password" id="setup-pass" placeholder="Leave blank if open" autocomplete="off">
+      </div>
+      <button id="setup-btn" class="btn-primary" onclick="submitSetup()">Connect</button>
+      <p id="setup-error" class="error-msg" style="display:none"></p>
+    </div>
+
+    <div id="setup-connecting" style="display:none;text-align:center;padding:2rem 0">
+      <div class="spinner"></div>
+      <p>Connecting to your network…</p>
+      <p class="setup-sub">The device will reboot and rejoin your network.</p>
+    </div>
+
+    <div id="setup-success" style="display:none;text-align:center;padding:1.5rem 0">
+      <div class="success-icon">✓</div>
+      <h2>Connected!</h2>
+      <p>Your Upright Go is now on your network.</p>
+      <div class="address-box">
+        <p>Bookmark one of these addresses:</p>
+        <a id="setup-mdns-link" class="address-link" href="#" target="_blank"></a>
+        <a id="setup-ip-link"   class="address-link" href="#" target="_blank"></a>
+      </div>
+      <p class="setup-sub">Disconnect from <strong>UprightGO-Setup</strong> and rejoin your normal network, then open the link above.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── Main dashboard ────────────────────────────────────────────────────────── -->
+<div id="main-screen" class="screen" style="display:none">
+
+  <header>
+    <div class="header-logo">↑ Upright Go</div>
+    <div class="header-status">
+      <span id="hdr-ble" class="status-chip">●&nbsp;Scanning…</span>
+      <span id="hdr-wifi" class="status-chip wifi-chip"></span>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Posture ring -->
+    <section class="card ring-card">
+      <div id="posture-ring" class="posture-ring state-waiting">
+        <span id="ring-icon">📡</span>
+      </div>
+      <div class="ring-label" id="ring-label">Searching for device…</div>
+    </section>
+
+    <!-- Mode buttons -->
+    <section class="card mode-card">
+      <div class="mode-buttons">
+        <button class="mode-btn active" data-mode="desk"   onclick="setMode('desk')">🪑 At Desk</button>
+        <button class="mode-btn"        data-mode="moving" onclick="setMode('moving')">🚶 Moving</button>
+        <button class="mode-btn"        data-mode="break"  onclick="setMode('break')">☕ Break</button>
+      </div>
+    </section>
+
+    <!-- Session stats -->
+    <section class="card stats-card">
+      <div class="stat-row">
+        <div class="stat">
+          <div class="stat-value" id="stat-score">—</div>
+          <div class="stat-label">Score</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="stat-duration">—</div>
+          <div class="stat-label">Duration</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="stat-alerts">—</div>
+          <div class="stat-label">Alerts</div>
+        </div>
+      </div>
+      <div class="pressure-wrap">
+        <div class="pressure-bar-bg">
+          <div id="pressure-fill" class="pressure-fill" style="width:0%"></div>
+          <div id="pressure-marker" class="pressure-marker" style="left:60%"></div>
+        </div>
+        <div class="pressure-labels"><span>Good</span><span>Slouch</span></div>
+      </div>
+      <button class="btn-ghost" onclick="resetSession()" style="margin-top:.5rem">Save &amp; Reset Session</button>
+    </section>
+
+    <!-- History chart -->
+    <section class="card">
+      <h3>Last 7 Days</h3>
+      <div class="chart-wrap"><canvas id="history-chart"></canvas></div>
+      <table class="history-table" id="history-table">
+        <thead><tr><th>Date</th><th>Score</th><th>Duration</th><th>Alerts</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Settings -->
+    <section class="card settings-card">
+      <h3>Settings</h3>
+
+      <div class="preset-row">
+        <button class="preset-btn" data-preset="lenient"  onclick="applyPreset('lenient')">Lenient</button>
+        <button class="preset-btn active" data-preset="normal" onclick="applyPreset('normal')">Normal</button>
+        <button class="preset-btn" data-preset="strict"   onclick="applyPreset('strict')">Strict</button>
+        <button class="preset-btn" data-preset="custom"   onclick="applyPreset('custom')">Custom</button>
+      </div>
+
+      <div id="custom-settings" style="display:none">
+        <div class="slider-row">
+          <label>Slouch angle: <strong id="lbl-angle">10°</strong></label>
+          <input type="range" id="sl-angle" min="3" max="30" value="10" oninput="updateLabel('lbl-angle',this.value+'°')">
+        </div>
+        <div class="slider-row">
+          <label>Alert window: <strong id="lbl-window">5 s</strong></label>
+          <input type="range" id="sl-window" min="1" max="15" value="5" step="0.5" oninput="updateLabel('lbl-window',this.value+' s')">
+        </div>
+        <div class="slider-row">
+          <label>Alert threshold: <strong id="lbl-thresh">60%</strong></label>
+          <input type="range" id="sl-thresh" min="10" max="90" value="60" oninput="updateLabel('lbl-thresh',this.value+'%')">
+        </div>
+        <div class="slider-row">
+          <label>Buzz cooldown: <strong id="lbl-cool">15 s</strong></label>
+          <input type="range" id="sl-cool" min="3" max="120" value="15" oninput="updateLabel('lbl-cool',this.value+' s')">
+        </div>
+        <div class="slider-row">
+          <label>Daily goal: <strong id="lbl-goal">20 min</strong></label>
+          <input type="range" id="sl-goal" min="5" max="60" value="20" oninput="updateLabel('lbl-goal',this.value+' min')">
+        </div>
+        <button class="btn-primary" onclick="saveCustomSettings()" style="margin-top:.5rem">Save Settings</button>
+      </div>
+
+      <hr style="margin:1.2rem 0;border-color:rgba(255,255,255,.1)">
+      <h4 style="margin-bottom:.6rem">Wi-Fi</h4>
+      <div id="wifi-status-line" class="wifi-status-line"></div>
+      <div class="field-group" style="margin-top:.6rem">
+        <input type="text"     id="wifi-ssid" placeholder="New SSID">
+        <input type="password" id="wifi-pass" placeholder="Password">
+        <button class="btn-primary" onclick="saveWifi()" style="margin-top:.4rem">Update &amp; Reboot</button>
+        <button class="btn-ghost"   onclick="forgetWifi()" style="margin-top:.3rem;color:#f66">Forget Network</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
