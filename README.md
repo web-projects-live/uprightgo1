@@ -1,8 +1,32 @@
-# Upright GO 1 — Open Source Dashboard
+# Upright GO 1 — Fix "Won't Connect" / App Discontinued (Open Source Replacement)
 
-An open-source replacement for the discontinued official Upright GO 1 app. Connects to your device over Bluetooth, buzzes you when you slouch, and tracks your posture progress through a mobile-responsive web dashboard.
+If your **Upright GO 1 posture trainer** has stopped working because the
+official Upright app was discontinued or won't connect to your phone anymore,
+this project gets it working again — three ways, depending on what hardware
+you have lying around.
 
 ![Dashboard screenshot showing posture ring, stats, and exercise cards](https://raw.githubusercontent.com/web-projects-live/upright-go-1/master/static/screenshot.png)
+
+It connects directly to the device over Bluetooth (BLE), buzzes you when you
+slouch, and tracks your posture progress through a mobile-responsive web
+dashboard — no official app, no account, no cloud required.
+
+Not affiliated with Upright Technologies.
+
+---
+
+## Which version should I use?
+
+| You have... | Use this | What it does |
+|---|---|---|
+| **A spare ESP32 dev board** | **[`esp32-cpp/`](esp32-cpp/)** ✅ recommended | Standalone C++ (PlatformIO/Arduino) firmware. Flash it once — it connects to your Upright GO over BLE, joins your Wi-Fi, and serves the dashboard at `http://uprightgo.local`. No PC needs to stay on. |
+| **A Windows/Mac/Linux PC, or a Raspberry Pi** | **[`app.py`](#installation)** (this repo's root) | Python + Flask app using `bleak` for BLE. Run it on any computer with Bluetooth; open the dashboard in a browser on your phone or PC. |
+| **An ESP32, and prefer MicroPython** | **[`esp32/`](esp32/)** (legacy/experimental) | Earlier MicroPython firmware for ESP32. Functional but less polished than `esp32-cpp` — kept for reference and for anyone already using it. |
+
+If you're not sure: most people should use **`esp32-cpp`** if they have an
+ESP32, or `app.py` on a PC/Pi if they don't.
+
+---
 
 ## Features
 
@@ -12,15 +36,13 @@ An open-source replacement for the discontinued official Upright GO 1 app. Conne
 - **7-day history** — bar chart + table of daily posture scores
 - **All-time stats** — total days trained, hours, average score
 - **Guided exercises** — 6 curated exercise cards linking to YouTube searches
-- **Settings** — adjustable buzz cooldown (3s–60s), persisted to SQLite
+- **Settings** — adjustable buzz cooldown (3s–60s), persisted to storage
 - **Auto-reconnect** — recovers from Bluetooth drops without restarting
 - **Mobile-responsive** — works in any phone or desktop browser
 
 ## Credits
 
 BLE protocol reverse-engineered by [niltonheck/upright-go-1-reverse-engineering](https://github.com/niltonheck/upright-go-1-reverse-engineering). This project builds on that research to create a full replacement for the discontinued Upright app.
-
-Not affiliated with Upright Technologies.
 
 ---
 
@@ -41,7 +63,13 @@ This app only ever touches two documented characteristics:
 
 ## Installation
 
-### Windows / Mac / Linux
+### Option 1: Standalone ESP32 (recommended)
+
+See **[`esp32-cpp/BUILD.md`](esp32-cpp/BUILD.md)** for full instructions.
+Flash a $5 ESP32 board once and it runs the whole thing — BLE connection,
+slouch detection, and web dashboard — with no computer needed afterwards.
+
+### Option 2: Windows / Mac / Linux / Raspberry Pi
 
 ```bash
 # 1. Install dependencies
@@ -55,10 +83,10 @@ cd upright-go-1
 python app.py
 ```
 
-Open **http://localhost:5000** in your browser.  
+Open **http://localhost:5000** in your browser.
 On your phone (same Wi-Fi): **http://\<your-pc-ip\>:5000** — the IP is printed on startup.
 
-### Android (Termux)
+### Option 3: Android (Termux)
 
 > **Note:** BLE on Android/Termux requires Python 3.11+ and may need Bluetooth permissions granted to Termux via Android Settings. If scanning fails, use the PC + phone-browser approach instead (run `python app.py` on your PC and open the dashboard URL in your phone's browser).
 
@@ -91,7 +119,7 @@ python slouch_buzzer.py
 2. Turn it on with a long press — the LED will flash green
 3. **Do not pair through Windows/Android Bluetooth settings** — the app connects directly and pairing causes connection failures
 4. Sit up straight and **double-press the button** to calibrate your upright baseline
-5. Run `python app.py` — the device is found automatically
+5. Start the app for your platform (above) — the device is found automatically
 
 ---
 
@@ -104,7 +132,34 @@ python slouch_buzzer.py
 | Score % | Percentage of session time spent upright |
 | Buzz cooldown | Minimum gap between vibration alerts |
 
-History is saved automatically at the end of each session (sessions under 30 seconds are discarded). The database lives at `posture.db` in the project folder.
+History is saved automatically at the end of each session (sessions under 30 seconds are discarded).
+
+---
+
+## Troubleshooting / FAQ
+
+**"My Upright GO 1 app doesn't work / was removed from the app store"** —
+This is expected; Upright Technologies discontinued the official app. This
+project replaces it entirely — see "Which version should I use?" above.
+
+**"My Upright GO won't connect / pair via Bluetooth"** —
+Don't pair it through your phone's or PC's Bluetooth settings — leave it
+unpaired there. This software connects directly via BLE. If it was previously
+paired, remove/forget it from your OS Bluetooth settings first.
+
+**"The device shows a green flashing light but nothing connects"** —
+Sit up straight and double-press the button on the device to calibrate —
+this is also how the original app initiated a connection, and these tools
+rely on the device advertising as `UprightGO`.
+
+**"It connects but won't buzz / no angle data"** —
+Make sure nothing else (your phone, the official app, Windows Bluetooth)
+is currently connected to the device — BLE devices like this only accept
+one connection at a time.
+
+**"Can I run this on a Raspberry Pi?"** —
+Yes — any Linux machine with Bluetooth (including Pi Zero W / Pi 4) works
+with `app.py` (Option 2 above).
 
 ---
 
